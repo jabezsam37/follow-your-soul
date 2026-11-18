@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Follow Your Soul – AI trip planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hind:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #EEF3EF;
+    --surface: #FFFFFF;
+    --surface-2: #F6F9F7;
+    --ink: #0E3B36;
+    --ink-soft: #4F6F6A;
+    --line: #D3DFDA;
+    --marigold: #E8A317;
+    --marigold-ink: #9A6A06;
+    --error: #A8361F;
+    --sky-top: #F7D9A0;
+    --sky-bottom: #F3EEDC;
+    --sun: #F2B33D;
+    --peak-far: #9FC1B7;
+    --peak-mid: #5E8F84;
+    --peak-near: #0E3B36;
+    --c-stay: #0E3B36;
+    --c-food: #E8A317;
+    --c-transport: #6E9C94;
+    --c-activities: #C79A5B;
+    --shadow: 0 18px 40px -24px rgba(14, 59, 54, 0.45);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F2421;
+    --surface: #17322E;
+    --surface-2: #1D3B36;
+    --ink: #E9F1EE;
+    --ink-soft: #A6BDB7;
+    --line: #2C4C46;
+    --marigold-ink: #F2BE4E;
+    --error: #F08C73;
+    --sky-top: #142B3D;
+    --sky-bottom: #24405A;
+    --sun: #E9E4CF;
+    --peak-far: #2E4D5C;
+    --peak-mid: #1E3A40;
+    --peak-near: #0F2421;
+    --c-stay: #9FC1B7;
+    --shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.7);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Hind", system-ui, sans-serif; font-size: 17px; line-height: 1.6;
+    transition: background-color 300ms, color 300ms;
+  }
+  .serif { font-family: "Rozha One", Georgia, serif; font-weight: 400; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .icon { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; min-height: 640px; overflow: hidden; isolation: isolate; color: var(--ink); }
+  .scene { position: absolute; inset: 0; z-index: -2; background: linear-gradient(var(--sky-top), var(--sky-bottom)); }
+  .scene svg { position: absolute; bottom: 0; left: 0; width: 100%; height: 72%; }
+  .scene .far { fill: var(--peak-far); }
+  .scene .mid { fill: var(--peak-mid); }
+  .scene .near { fill: var(--peak-near); }
+  .scene .sun { fill: var(--sun); }
+  .scene .snow { fill: #F4F7F5; opacity: 0.85; }
+  :root[data-theme="dark"] .scene .snow { opacity: 0.35; }
+  @media (prefers-reduced-motion: no-preference) {
+    .scene .layer { animation: rise 1100ms cubic-bezier(.2,.7,.2,1) both; }
+    .scene .mid { animation-delay: 120ms; }
+    .scene .near { animation-delay: 240ms; }
+    .scene .sun { animation: sunrise 1600ms cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes rise { from { transform: translateY(60px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes sunrise { from { transform: translateY(80px); } to { transform: none; } }
+  }
+  .photo { position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity 900ms ease; background-size: cover; background-position: center; }
+  .photo.on { opacity: 1; }
+  .photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,28,25,.55) 0%, rgba(8,28,25,.15) 45%, rgba(8,28,25,.75) 100%); }
+  .hero.has-photo { color: #FFFFFF; }
+  .photo-credit { position: absolute; right: 24px; top: 66px; margin: 0; font-size: 12px; color: rgba(255,255,255,.85); z-index: 1; }
+  .photo-credit a { color: inherit; }
+
+  .bar { display: flex; justify-content: space-between; align-items: center; max-width: 1120px; margin: 0 auto; padding: 22px 24px 0; }
+  .wordmark { margin: 0; font-size: 26px; line-height: 1; }
+  .compass { display: inline-block; width: .74em; height: .74em; vertical-align: -0.06em; }
+  .theme-toggle { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: inherit; border: 1.5px solid currentColor; border-radius: 999px; padding: 7px 14px; font: 500 14px "Hind", sans-serif; cursor: pointer; opacity: .85; }
+  .theme-toggle:hover { opacity: 1; }
+
+  .hero-inner { max-width: 1120px; margin: 0 auto; padding: 56px 24px 140px; }
+  .headline { margin: 0; font-size: clamp(48px, 8.5vw, 104px); line-height: .95; letter-spacing: -0.015em; max-width: 9.5em; }
+  .lede { max-width: 32em; margin: 18px 0 32px; font-size: 18px; opacity: .9; }
+
+  form.sentence {
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    color: var(--ink);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border-radius: 24px; padding: 30px 32px 26px; max-width: 760px;
+    box-shadow: var(--shadow);
+    font-family: "Rozha One", Georgia, serif; font-size: clamp(21px, 3.2vw, 28px); line-height: 2.05;
+  }
+  .sentence input, .sentence select {
+    font: inherit; color: var(--marigold-ink); background: transparent;
+    border: 0; border-bottom: 2px dashed var(--line); border-radius: 0;
+    padding: 0 4px; margin: 0 2px; -webkit-appearance: none; appearance: none; min-width: 2ch;
+  }
+  .sentence select { cursor: pointer; }
+  .sentence select option { color: #0E3B36; }
+  .sentence input:focus, .sentence select:focus { outline: none; border-bottom: 2px solid var(--marigold); }
+  .sentence input:focus-visible, .sentence select:focus-visible { outline: 3px solid rgba(232,163,23,.35); outline-offset: 2px; }
+  .sentence input::-webkit-outer-spin-button, .sentence input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .sentence input[type=number] { -moz-appearance: textfield; text-align: center; }
+  .nowrap { white-space: nowrap; }
+  .actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 18px; font: 16px/1.5 "Hind", sans-serif; }
+  .go { display: inline-flex; align-items: center; gap: 10px; font: 600 17px "Hind", sans-serif; color: #0E3B36; background: var(--marigold); border: 0; border-radius: 999px; padding: 13px 26px; cursor: pointer; }
+  .go:hover { background: #F0B533; }
+  .go:focus-visible, .theme-toggle:focus-visible, .tab:focus-visible { outline: 3px solid var(--marigold); outline-offset: 3px; }
+  .go:disabled { opacity: .65; cursor: progress; }
+  .status { color: var(--ink-soft); }
+  .status.error { color: var(--error); }
+
+  /* ---------- Loading ---------- */
+  .loading { display: none; flex-direction: column; align-items: center; text-align: center; padding: 72px 24px; }
+  .loading.on { display: flex; }
+  .loading svg { width: 96px; height: 96px; color: var(--ink); }
+  .needle { transform-origin: 50px 50px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .loading.on .needle { animation: seek 2.4s cubic-bezier(.45,.05,.3,1) infinite; }
+    @keyframes seek { 0% { transform: rotate(0); } 30% { transform: rotate(250deg); } 55% { transform: rotate(190deg); } 80% { transform: rotate(380deg); } 100% { transform: rotate(360deg); } }
+  }
+  .loading p { font-size: 22px; margin: 18px 0 4px; }
+  .loading small { color: var(--ink-soft); }
+
+  /* ---------- Results ---------- */
+  main { max-width: 1120px; margin: -88px auto 0; padding: 0 24px 96px; position: relative; }
+  #result[hidden] { display: none; }
+  .panel { background: var(--surface); border-radius: 24px; box-shadow: var(--shadow); }
+  .overview { display: grid; grid-template-columns: 1.35fr 1fr; gap: 0; overflow: hidden; }
+  .overview .intro { padding: 32px 34px; }
+  .summary { margin: 0 0 18px; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.15; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; padding: 0; list-style: none; }
+  .chips li { background: var(--surface-2); border-radius: 999px; padding: 5px 13px; font-size: 14px; color: var(--ink-soft); }
+  .stay { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; background: var(--surface-2); border-radius: 16px; }
+  .stay .icon { width: 26px; height: 26px; color: var(--marigold-ink); margin-top: 3px; }
+  .stay b { display: block; font-size: 18px; }
+  .stay span { color: var(--ink-soft); font-size: 15px; }
+  .warnings { display: flex; gap: 12px; margin: 16px 0 0; padding: 14px 16px; border: 1.5px solid color-mix(in srgb, var(--marigold) 55%, transparent); border-radius: 16px; font-size: 15px; }
+  .warnings .icon { color: var(--marigold-ink); margin-top: 3px; }
+  .warnings p { margin: 0; }
+  .budget { background: var(--surface-2); padding: 30px 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+  .donut { position: relative; width: 210px; height: 210px; }
+  .donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 22; }
+  @media (prefers-reduced-motion: no-preference) {
+    .donut .seg { transition: stroke-dasharray 900ms cubic-bezier(.2,.7,.2,1); }
+  }
+  .donut-centre { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .donut-centre .serif { font-size: 32px; line-height: 1; }
+  .donut-centre small { color: var(--ink-soft); font-size: 14px; margin-top: 6px; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin: 0; padding: 0; list-style: none; font-size: 15px; width: 100%; max-width: 300px; }
+  .legend li { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .legend b { color: var(--ink); margin-left: auto; font-weight: 600; }
+  .spare { font-size: 15px; color: var(--ink-soft); margin: 0; }
+  .spare b { color: var(--ink); }
+
+  .journey { display: grid; grid-template-columns: 1fr 1.05fr; gap: 24px; margin-top: 24px; align-items: start; }
+  .map-wrap { position: sticky; top: 20px; overflow: hidden; }
+  #map { height: 560px; border-radius: 24px; background: var(--surface-2); }
+  .map-note { position: absolute; left: 14px; bottom: 12px; z-index: 500; background: var(--surface); color: var(--ink-soft); font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+  :root[data-theme="dark"] .leaflet-tile-pane { filter: invert(.92) hue-rotate(180deg) saturate(.6) brightness(.9); }
+  .pin { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--marigold); color: #0E3B36; font: 600 15px "Hind", sans-serif; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,.3); transition: transform 200ms; }
+  .pin.active { transform: scale(1.3); background: #0E3B36; color: #fff; }
+  .pin.home { background: #fff; color: #0E3B36; }
+
+  .days { overflow: hidden; }
+  .tabs { display: flex; gap: 8px; padding: 18px 18px 0; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; font: 500 15px "Hind", sans-serif; color: var(--ink-soft); background: var(--surface-2); border: 0; border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+  .tab[aria-current="true"] { background: var(--ink); color: var(--bg); }
+  .track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .track::-webkit-scrollbar { display: none; }
+  .day { flex: 0 0 100%; scroll-snap-align: start; padding: 18px; }
+  .day-photo { position: relative; aspect-ratio: 16 / 10; border-radius: 18px; overflow: hidden; background: linear-gradient(135deg, var(--peak-far), var(--peak-mid)); }
+  .day-photo img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity 600ms; }
+  .day-photo img.on { opacity: 1; }
+  .day-photo .credit { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .day-photo .credit a { color: inherit; }
+  .day-photo .area { position: absolute; left: 18px; bottom: 14px; margin: 0; color: #fff; font-size: 34px; line-height: 1.05; text-shadow: 0 2px 14px rgba(0,0,0,.45); }
+  .day-photo .num { position: absolute; left: 18px; top: 14px; background: var(--marigold); color: #0E3B36; font-weight: 600; font-size: 14px; border-radius: 999px; padding: 3px 12px; }
+  .list { list-style: none; margin: 18px 4px 0; padding: 0; }
+  .list li { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .list li:last-child { border-bottom: 0; }
+  .list .icon { color: var(--marigold-ink); margin-top: 4px; }
+  .list .what { font-weight: 600; }
+  .list .where { display: block; color: var(--ink-soft); font-size: 15px; }
+  .tip { display: flex; gap: 10px; margin: 14px 4px 4px; color: var(--ink-soft); font-size: 15px; font-style: italic; }
+  .tip .icon { margin-top: 3px; }
+  .swipe-hint { text-align: center; font-size: 13px; color: var(--ink-soft); padding: 0 0 16px; }
+
+  footer { max-width: 1120px; margin: 0 auto; padding: 0 24px 48px; font-size: 14px; color: var(--ink-soft); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    #result.show .overview { animation: arrive 600ms cubic-bezier(.2,.7,.2,1) both; }
+    #result.show .journey { animation: arrive 600ms 150ms cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes arrive { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+  }
+  @media (max-width: 900px) {
+    .overview, .journey { grid-template-columns: 1fr; }
+    .map-wrap { position: relative; top: 0; }
+    #map { height: 340px; }
+  }
+  @media (max-width: 560px) {
+    .hero { min-height: 0; }
+    .hero-inner { padding: 36px 18px 120px; }
+    form.sentence { padding: 22px 20px 20px; border-radius: 20px; }
+    main { padding: 0 14px 72px; }
+    .overview .intro, .budget { padding: 24px 22px; }
+    .theme-toggle span { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="hero" id="hero">
+  <div class="scene" aria-hidden="true">
+    <svg viewBox="0 0 1440 520" preserveAspectRatio="xMidYMax slice">
+      <circle class="sun" cx="1080" cy="150" r="70"/>
+      <path class="layer far" d="M0 330 L150 210 L270 290 L420 150 L560 270 L700 190 L860 300 L1010 170 L1160 280 L1300 200 L1440 260 L1440 520 L0 520 Z"/>
+      <path class="layer snow" d="M420 150 L455 182 L432 178 L418 196 L402 176 L385 183 Z M1010 170 L1046 203 L1022 199 L1008 214 L994 197 L975 204 Z"/>
+      <path class="layer mid" d="M0 400 L180 300 L330 380 L500 260 L660 370 L820 290 L990 390 L1150 300 L1300 370 L1440 320 L1440 520 L0 520 Z"/>
+      <path class="layer near" d="M0 470 L220 400 L420 450 L640 380 L860 455 L1080 400 L1280 460 L1440 420 L1440 520 L0 520 Z"/>
+    </svg>
+  </div>
+  <div class="photo" id="hero-photo" aria-hidden="true"></div>
+  <p class="photo-credit" id="hero-credit" hidden></p>
+
+  <div class="bar">
+    <p class="wordmark serif" aria-label="Follow your soul">Follow your s<svg class="compass" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="9"/><path d="M50 18 L61 50 L50 82 L39 50 Z" fill="#E8A317"/><path d="M50 50 L61 50 L50 82 L39 50 Z" fill="currentColor"/></svg>ul</p>
+    <button class="theme-toggle" id="theme" type="button" aria-pressed="false">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <span>Dark mode</span>
+    </button>
+  </div>
+
+  <div class="hero-inner">
+    <h1 class="headline serif" id="headline">Where is your soul taking you?</h1>
+    <p class="lede">Tell us the place, the month and what you can spend. You get a day-by-day plan with places to see, somewhere to stay and local food to try, kept within your budget.</p>
+
+    <form class="sentence" id="trip-form" novalidate>
+      Take me to
+      <label class="visually-hidden" for="destination">Destination</label>
+      <input id="destination" name="destination" value="Manali" maxlength="60" required autocomplete="off">
+      for
+      <label class="visually-hidden" for="days">Number of days</label>
+      <input id="days" name="days" type="number" min="1" max="10" value="4" required>
+      days in
+      <label class="visually-hidden" for="month">Month of travel</label>
+      <select id="month" name="month"></select>,
+      <label class="visually-hidden" for="travellers">Number of travellers</label>
+      <input id="travellers" name="travellers" type="number" min="1" max="10" value="1" required>
+      <span id="traveller-word">traveller</span>, with
+      <span class="nowrap">₹<label class="visually-hidden" for="budget">Total budget in rupees</label><input id="budget" name="budget" type="number" min="1000" max="1000000" step="500" value="15000" required></span>
+      to spend. I love
+      <label class="visually-hidden" for="interests">Interests</label>
+      <input id="interests" name="interests" value="food, adventure" maxlength="200">.
+      <div class="actions">
+        <button class="go" type="submit" id="go">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>
+          <span id="go-label">Plan my trip</span>
+        </button>
+        <span class="status" id="status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+</header>
+
+<main>
+  <div class="loading panel" id="loading" aria-hidden="true">
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" stroke-width="5"/>
+      <g class="needle"><path d="M50 14 L59 50 L50 86 L41 50 Z" fill="#E8A317"/><path d="M50 50 L59 50 L50 86 L41 50 Z" fill="currentColor"/></g>
+      <circle cx="50" cy="50" r="4" fill="var(--bg)"/>
+    </svg>
+    <p class="serif" id="loading-line">Reading the map</p>
+    <small>Plans usually take 10 to 30 seconds.</small>
+  </div>
+  <section id="result" hidden aria-live="polite"></section>
+</main>
+
+<footer>Follow Your Soul is a portfolio project built on AWS Lambda, API Gateway and Amazon Bedrock. Plans are AI-generated, so check opening times and prices before you book. Photos and places from Wikipedia; map data © OpenStreetMap contributors.</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // Your API Gateway address. Change this if you redeploy to a new stage.
+  const API_URL = "https://olg5dwswfd.execute-api.ap-south-1.amazonaws.com/dev/plan";
+
+  const $ = id => document.getElementById(id);
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const rupees = n => "₹" + Math.round(Number(n)).toLocaleString("en-IN");
+
+  // ---------- Theme ----------
+  const root = document.documentElement;
+  function setTheme(t) {
+    root.dataset.theme = t;
+    $("theme").setAttribute("aria-pressed", String(t === "dark"));
+    $("theme").querySelector("span").textContent = t === "dark" ? "Light mode" : "Dark mode";
+    try { localStorage.setItem("fys-theme", t); } catch (e) {}
+  }
+  let saved = null;
+  try { saved = localStorage.getItem("fys-theme"); } catch (e) {}
+  setTheme(saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  $("theme").addEventListener("click", () => setTheme(root.dataset.theme === "dark" ? "light" : "dark"));
+
+  // ---------- Form ----------
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const nextMonth = (new Date().getMonth() + 1) % 12;
+  months.forEach((m, i) => {
+    const o = document.createElement("option");
+    o.value = m; o.textContent = m; o.selected = i === nextMonth;
+    $("month").appendChild(o);
+  });
+  const form = $("trip-form");
+  const fit = input => { input.style.width = (Math.max(input.value.length, 2) + 1) + "ch"; };
+  form.querySelectorAll("input").forEach(i => { fit(i); i.addEventListener("input", () => fit(i)); });
+  $("travellers").addEventListener("input", e => {
+    $("traveller-word").textContent = Number(e.target.value) === 1 ? "traveller" : "travellers";
+  });
+
+  // ---------- Helpers ----------
+  // Build elements with textContent so AI text can never inject HTML.
+  function el(tag, attrs = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "style") node.style.cssText = v; else node.setAttribute(k, v);
+    }
+    for (const c of children) if (c != null) node.append(c);
+    return node;
+  }
+  const ICONS = {
+    pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    bowl: '<path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M8 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M16 7c0-1.5 1-2 1-3.5"/>',
+    bed: '<path d="M3 18V6M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="11" r="2"/>',
+    alert: '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/>',
+    bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+  };
+  function icon(name) {
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "icon"); s.setAttribute("aria-hidden", "true");
+    s.innerHTML = ICONS[name];
+    return s;
+  }
+
+  // ---------- Wikipedia: photos and coordinates, no API key ----------
+  const wikiCache = new Map();
+  async function wikiSummary(title) {
+    const r = await fetch("https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(title.replace(/ /g, "_")));
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.type === "disambiguation") return null;
+    return {
+      title: d.title,
+      image: (d.originalimage && d.originalimage.source) || (d.thumbnail && d.thumbnail.source) || null,
+      thumb: (d.thumbnail && d.thumbnail.source) || null,
+      lat: d.coordinates ? d.coordinates.lat : null,
+      lon: d.coordinates ? d.coordinates.lon : null,
+      url: d.content_urls && d.content_urls.desktop ? d.content_urls.desktop.page : null,
+    };
+  }
+  async function wikiSearch(query) {
+    const u = "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=1&srsearch=" + encodeURIComponent(query);
+    const r = await fetch(u);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const hit = d.query && d.query.search && d.query.search[0];
+    return hit ? wikiSummary(hit.title) : null;
+  }
+  // Try each query in order until one gives what we need.
+  async function lookup(queries, need) {
+    for (const q of queries) {
+      const key = q.toLowerCase();
+      if (!wikiCache.has(key)) wikiCache.set(key, wikiSearch(q).catch(() => null));
+      const hit = await wikiCache.get(key);
+      if (hit && (need === "image" ? hit.image : hit.lat != null)) return hit;
+    }
+    return null;
+  }
+
+  // ---------- Map ----------
+  let map = null, layer = null, markers = [];
+  function makeMap() {
+    if (!window.L) return false;
+    // Each plan builds a new map box, so throw away the old map and start fresh.
+    if (map) { map.remove(); map = null; }
+    map = L.map("map", { scrollWheelZoom: false, zoomControl: true, attributionControl: true });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18, attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+    markers = [];
+    return true;
+  }
+  function pinIcon(label, cls) {
+    return L.divIcon({ className: "", html: `<div class="pin ${cls || ""}">${label}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
+  }
+  function drawRoute(points) {
+    if (!map) return;
+    const path = points.filter(Boolean).map(p => [p.lat, p.lon]);
+    if (path.length > 1) L.polyline(path, { color: "#E8A317", weight: 3, dashArray: "6 8", opacity: .9 }).addTo(layer);
+    const all = markers.map(m => m.getLatLng());
+    if (all.length === 1) map.setView(all[0], 11);
+    else if (all.length > 1) map.fitBounds(L.latLngBounds(all), { padding: [40, 40], maxZoom: 12 });
+  }
+  function highlight(i) {
+    markers.forEach(m => {
+      const el = m.getElement && m.getElement();
+      const pin = el && el.querySelector(".pin");
+      if (pin && m.options.dayIndex != null) pin.classList.toggle("active", m.options.dayIndex === i);
+      if (m.options.dayIndex === i && map) map.panTo(m.getLatLng(), { animate: !reduceMotion });
+    });
+  }
+
+  // ---------- Rendering ----------
+  function donut(b, limit) {
+    const parts = [["Stay", b.stay, "var(--c-stay)"], ["Food", b.food, "var(--c-food)"], ["Transport", b.transport, "var(--c-transport)"], ["Activities", b.activities, "var(--c-activities)"]];
+    const R = 80, C = 2 * Math.PI * R;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 200 200");
+    svg.innerHTML = `<circle cx="100" cy="100" r="${R}" stroke="var(--line)"/>`;
+    let offset = 0;
+    const segs = [];
+    parts.forEach(([, amount, colour]) => {
+      const len = (amount / limit) * C;
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("class", "seg"); c.setAttribute("cx", 100); c.setAttribute("cy", 100); c.setAttribute("r", R);
+      c.setAttribute("stroke", colour); c.setAttribute("stroke-dashoffset", String(-offset));
+      c.setAttribute("stroke-dasharray", `0 ${C}`);
+      svg.appendChild(c); segs.push([c, len]);
+      offset += len;
+    });
+    requestAnimationFrame(() => requestAnimationFrame(() => segs.forEach(([c, len]) => c.setAttribute("stroke-dasharray", `${Math.max(len - 2, 0)} ${C}`))));
+    const wrap = el("div", { class: "donut", role: "img", "aria-label": `Spending ${rupees(b.total)} of ${rupees(limit)}` }, svg,
+      el("div", { class: "donut-centre" }, el("span", { class: "serif" }, rupees(b.total)), el("small", {}, `of ${rupees(limit)}`)));
+    const legend = el("ul", { class: "legend" });
+    parts.forEach(([label, amount, colour]) => legend.append(el("li", {}, el("i", { style: `background:${colour}` }), label, el("b", {}, rupees(amount)))));
+    return el("div", { class: "budget" }, wrap, legend, el("p", { class: "spare" }, "You keep ", el("b", {}, rupees(limit - b.total)), " spare"));
+  }
+
+  function render(plan, req) {
+    const b = plan.budget, s = plan.stay;
+    const intro = el("div", { class: "intro" },
+      el("h2", { class: "summary serif" }, plan.summary),
+      (() => { const ul = el("ul", { class: "chips" });
+        [`${req.days} days`, req.month, `${req.travellers} ${req.travellers === 1 ? "traveller" : "travellers"}`, ...req.interests.split(",").map(x => x.trim()).filter(Boolean)]
+          .forEach(t => ul.append(el("li", {}, t))); return ul; })(),
+      el("div", { class: "stay" }, icon("bed"), el("div", {}, el("b", {}, s.name), el("span", {}, `${s.area} · ${rupees(s.price_per_night)} a night × ${b.nights} ${b.nights === 1 ? "night" : "nights"}`))));
+    (plan.seasonal_warnings || []).forEach(w => intro.append(el("div", { class: "warnings" }, icon("alert"), el("p", {}, w))));
+    const overview = el("section", { class: "overview panel" }, intro, donut(b, req.budget));
+
+    // Days: tabs + swipeable track
+    const tabs = el("div", { class: "tabs", role: "group", "aria-label": "Days" });
+    const track = el("div", { class: "track" });
+    const photoSlots = [];
+    plan.days.forEach((d, i) => {
+      const tab = el("button", { class: "tab", type: "button", "aria-current": String(i === 0), "data-i": i }, `Day ${d.day}`);
+      tab.addEventListener("click", () => track.children[i].scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest", inline: "start" }));
+      tabs.append(tab);
+
+      const img = el("img", { alt: "" });
+      const credit = el("span", { class: "credit" });
+      const photo = el("div", { class: "day-photo" }, img, el("span", { class: "num" }, `Day ${d.day}`), el("h3", { class: "area serif" }, d.area), credit);
+      photoSlots.push({ img, credit });
+      const list = el("ul", { class: "list" });
+      d.sights.forEach(sight => list.append(el("li", {}, icon("pin"), el("div", {}, el("span", { class: "what" }, sight)))));
+      d.food.forEach(f => {
+        const dish = typeof f === "string" ? f : f.dish;
+        const where = typeof f === "string" ? null : f.where;
+        list.append(el("li", {}, icon("bowl"), el("div", {}, el("span", { class: "what" }, dish), where ? el("span", { class: "where" }, where) : null)));
+      });
+      const day = el("article", { class: "day", "aria-label": `Day ${d.day}, ${d.area}` }, photo, list,
+        d.tip ? el("p", { class: "tip" }, icon("bulb"), d.tip) : null);
+      track.append(day);
+    });
+    const days = el("section", { class: "days panel", "aria-label": "Day by day" }, tabs, track,
+      el("p", { class: "swipe-hint" }, plan.days.length > 1 ? "Swipe or use the day buttons to move between days" : ""));
+
+    const mapWrap = el("div", { class: "map-wrap panel" }, el("div", { id: "map", role: "region", "aria-label": "Map of your trip" }),
+      el("span", { class: "map-note" }, "Dotted line shows the order of stops, not roads"));
+    const journey = el("section", { class: "journey" }, mapWrap, days);
+
+    $("result").replaceChildren(overview, journey);
+    $("result").hidden = false;
+    $("result").classList.remove("show"); void $("result").offsetWidth; $("result").classList.add("show");
+
+    // Keep the active tab in step with swiping.
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (en.isIntersecting) {
+          const i = [...track.children].indexOf(en.target);
+          [...tabs.children].forEach((t, j) => t.setAttribute("aria-current", String(j === i)));
+          tabs.children[i].scrollIntoView({ block: "nearest", inline: "nearest" });
+          highlight(i);
+        }
+      });
+    }, { root: track, threshold: 0.6 });
+    [...track.children].forEach(c => io.observe(c));
+
+    enrich(plan, req, photoSlots);
+  }
+
+  let planSeq = 0;
+  async function enrich(plan, req, photoSlots) {
+    const mine = ++planSeq;            // ignore late results from an older plan
+    const current = () => mine === planSeq;
+    const dest = req.destination;
+    const hasMap = makeMap();
+    if (hasMap) map.setView([22.5, 79], 4);
+    else $("map").replaceChildren(el("p", { style: "padding:24px;margin:0;color:var(--ink-soft)" }, "The map couldn't load. Check your internet connection and plan the trip again."));
+
+    // Hero photo of the destination
+    lookup([dest, `${dest} India`], "image").then(hit => {
+      if (!hit || !current()) return;
+      const pre = new Image();
+      pre.onload = () => {
+        $("hero-photo").style.backgroundImage = `url("${hit.image}")`;
+        $("hero-photo").classList.add("on");
+        $("hero").classList.add("has-photo");
+        const c = $("hero-credit");
+        c.replaceChildren("Photo: ", el("a", { href: hit.url || "https://en.wikipedia.org", target: "_blank", rel: "noopener" }, "Wikipedia"));
+        c.hidden = false;
+      };
+      pre.src = hit.image;
+    });
+    $("headline").textContent = `Your ${plan.days.length} days in ${dest}`;
+
+    // Per-day photos and map pins
+    const points = await Promise.all(plan.days.map(async (d, i) => {
+      const firstSight = d.sights[0] || d.area;
+      const [pic, place] = await Promise.all([
+        lookup([`${firstSight} ${dest}`, `${d.area} ${dest}`, d.area], "image"),
+        lookup([`${d.area} ${dest}`, d.area, `${firstSight} ${dest}`], "coords"),
+      ]);
+      if (pic) {
+        const { img, credit } = photoSlots[i];
+        img.onload = () => img.classList.add("on");
+        img.src = pic.thumb && pic.thumb.includes("/thumb/") ? pic.thumb.replace(/\/\d+px-/, "/960px-") : pic.image;
+        img.alt = pic.title;
+        img.onerror = () => { img.src = pic.image; };
+        credit.replaceChildren(el("a", { href: pic.url || "#", target: "_blank", rel: "noopener" }, "Wikipedia"));
+      }
+      if (place && hasMap && current()) {
+        const m = L.marker([place.lat, place.lon], { icon: pinIcon(d.day), dayIndex: i, title: `Day ${d.day}: ${d.area}` }).addTo(layer);
+        m.on("click", () => document.querySelectorAll(".tab")[i].click());
+        markers.push(m);
+        return place;
+      }
+      return null;
+    }));
+
+    if (hasMap && current()) {
+      const home = await lookup([`${plan.stay.area} ${dest}`, plan.stay.area], "coords");
+      if (home) markers.push(L.marker([home.lat, home.lon], { icon: pinIcon("⌂", "home"), title: `Stay: ${plan.stay.name}`, zIndexOffset: -100 }).addTo(layer));
+      drawRoute(points);
+      highlight(0);
+      setTimeout(() => map.invalidateSize(), 200);
+    }
+  }
+
+  // ---------- Loading animation ----------
+  const lines = ["Reading the map", "Checking the season", "Finding local food", "Picking a place to stay", "Balancing your budget"];
+  let lineTimer = null;
+  function loading(on) {
+    $("loading").classList.toggle("on", on);
+    $("loading").setAttribute("aria-hidden", String(!on));
+    clearInterval(lineTimer);
+    if (on) {
+      let i = 0; $("loading-line").textContent = lines[0];
+      lineTimer = setInterval(() => { i = (i + 1) % lines.length; $("loading-line").textContent = lines[i]; }, 2600);
+      $("result").hidden = true;
+      $("loading").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+    }
+  }
+
+  function showError(msg) { $("status").textContent = msg; $("status").classList.add("error"); }
+
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    $("status").classList.remove("error"); $("status").textContent = "";
+    const req = {
+      destination: form.destination.value.trim(),
+      days: Number(form.days.value),
+      month: form.month.value,
+      travellers: Number(form.travellers.value),
+      budget: Number(form.budget.value),
+      interests: form.interests.value.trim() || "sightseeing, local food",
+    };
+    if (!req.destination) { showError("Enter a destination."); form.destination.focus(); return; }
+    if (!(req.days >= 1 && req.days <= 10)) { showError("Choose 1 to 10 days."); form.days.focus(); return; }
+    if (!(req.travellers >= 1 && req.travellers <= 10)) { showError("Choose 1 to 10 travellers."); form.travellers.focus(); return; }
+    if (!(req.budget >= 1000 && req.budget <= 1000000)) { showError("Enter a budget between ₹1,000 and ₹10,00,000."); form.budget.focus(); return; }
+
+    $("go").disabled = true; $("go-label").textContent = "Planning…";
+    loading(true);
+    try {
+      const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 429) throw new Error("Too many requests right now. Wait a few seconds and try again.");
+      if (res.status === 504) throw new Error("Planning took too long. Try again, or choose fewer days.");
+      if (!res.ok) throw new Error(body.error || body.message || `The planner returned an error (${res.status}).`);
+      loading(false);
+      render(body.plan, req);
+      $("result").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    } catch (err) {
+      loading(false);
+      showError(err.message === "Failed to fetch" ? "Couldn't reach the planner. Check your internet connection and try again." : err.message);
+      form.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+    } finally {
+      $("go").disabled = false; $("go-label").textContent = "Plan my trip";
+    }
+  });
+</script>
+</body>
+</html>
