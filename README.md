@@ -77,18 +77,6 @@ python planner.py --destination Manali --budget 15000 --days 4 --month December 
 
 Set `FYS_MODEL_ID` to use a different Bedrock model or inference profile.
 
-## Deploy
-
-```bash
-# Lambda
-cd backend && zip function.zip lambda_function.py planner.py
-aws lambda update-function-code --function-name fys-plan-trip --zip-file fileb://function.zip
-
-# Website
-aws s3 cp frontend/index.html s3://YOUR_BUCKET/index.html
-aws cloudfront create-invalidation --distribution-id YOUR_DISTRIBUTION_ID --paths "/*"
-```
-
 ## What I learned
 
 - **Put rules in code, not only in the prompt.** The prompt asks the model to skip places closed in winter and to keep a 10% buffer, and it sometimes ignores both. Checks in code are reliable; prompt rules are suggestions.
